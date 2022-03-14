@@ -8,6 +8,9 @@ using namespace std;
 
 char* rom;
 
+//Z80 CPU
+Z80* z80;
+
 //Video Memory
 unsigned char graphicsRAM[8192];
 int palette[4];
@@ -23,6 +26,10 @@ int line=0, cmpline=0, videostate=0, keyboardColumn=0, horizontal=0;
 int gpuMode=HBLANK;
 int romOffset = 0x4000;
 long totalInstructions=0;
+
+// Keyboard Keys
+int keys1 = 0xf;
+int keys0 = 0xf;
 
 
 unsigned char getKey() {
@@ -56,7 +63,55 @@ unsigned char getVideoState() {
         if(gpuMode==VRAM) by|=3;
 
         return (unsigned char)((by|(videostate&0xf8))&0xff);
- }
+}
+
+
+void keydown(int value)
+{
+    qInfo() << "Key pressed: " << value;
+    if(value == 32 || value == 114)		//right, D
+        keys1 &= 0xe;
+    else if(value == 30 || value == 113)	//left, A
+        keys1 &= 0xd;
+    else if(value == 17 || value == 111)	//Up, W or arrow
+        keys1 &= 0xb;
+    else if(value == 31 || value == 116)	//Down, S or arrow
+        keys1 &= 0x7;
+    else if(value == 57 || value == 45)	//A, Z or space
+        keys0 &= 0xe;
+    else if(value == 36 || value == 46)	//B, X or J
+        keys0 &= 0xd;
+    else if(value == 1  || value == 119)	//Start, ESC or DEL
+        keys0 &= 0xb;
+    else if(value == 42 || value == 62)	//Select, LSHIFT or RSHIFT
+        keys0 &= 0x7;
+
+
+    z80->throwInterrupt(0x10);
+}
+
+void keyup(int value)
+{
+    qInfo() << "Key up: " << value;
+    if(value == 32|| value == 114)		//right, D or arrow
+        keys1 |= 1;
+    else if(value == 30 || value == 113)	//left, A or arrow
+        keys1 |= 2;
+    else if(value == 17 || value == 111)	//Up, W or arrow
+        keys1 |= 4;
+    else if(value == 31 || value == 116)	//Down, S or arrow
+        keys1 |= 8;
+    else if(value == 57 || value == 45)	//A, Z or space
+        keys0 |= 1;
+    else if(value == 36 || value == 46)	//B, X or J
+        keys0 |= 2;
+    else if(value == 1 || value == 119)	//Start, esc or del
+        keys0 |= 4;
+    else if(value == 42 || value == 62)	//Select, Lshift or Rshift
+        keys0 |= 8;
+
+    z80->throwInterrupt(0x10);
+}
 
 
 unsigned char memoryRead(int address)
@@ -71,8 +126,12 @@ unsigned char memoryRead(int address)
         return workingRAM[address%0x2000];
     else if(address >= 0xFF80 && address <= 0xFFFF)
         return page0RAM[address% 0x80];
-    else if(address == 0xFF00)
-        return getKey();
+    else if(address == 0xff00) {
+        if((keyboardColumn&0x30)==0x10)
+            return keys0;
+        else
+            return keys1;
+    }
 
 
     else if(address == 0xFF41)
@@ -122,8 +181,10 @@ void memoryWrite(int address, unsigned char value)
         setPalette(value);
     else if(address >= 0xFF80 && address <= 0xFFFF)
             page0RAM[address% 0x80] = value;
+    else if(address == 0xff00)
+            keyboardColumn = value;
     else
-        qInfo() << value <<" is outside of memorywrite spefications.";
+        qInfo() << value <<" is not Implemented.";
 }
 
 void renderScreen(int row) {
@@ -189,7 +250,7 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     qInfo() << "Part 1";
     qInfo() << "Reading Rom from a File";
-    ifstream romfile("mario.gb", ios::in|ios::binary|ios::ate); // Beware! copy the rom file to the output directory
+    ifstream romfile("tetris.gb", ios::in|ios::binary|ios::ate); // Beware! copy the rom file to the output directory
     streampos size = romfile.tellg();
     qInfo() << "Rom Size: " << size;
     rom = new char[size];
@@ -199,34 +260,9 @@ int main(int argc, char *argv[])
     romfile.close();
     qInfo() << "Displaying the Window";
     setup(argc, argv);
-    qInfo() << "Part 2";
-    qInfo() << "Reading the graphics dump into memory";
-//    int n;
-//        ifstream vidfile("screendump.txt",ios::in);
-//        for(int i=0; i<8192; i++){
-//            int n;
-//            vidfile>>n;
-//            graphicsRAM[i]=(unsigned char)n;
-//        }
-//    vidfile >> tileset;
-//    vidfile >> tilemap;
-//    vidfile >> scrollx;
-//    vidfile >> scrolly;
-//    vidfile >> palette[0];
-//    vidfile >> palette[1];
-//    vidfile >> palette[2];
-//    vidfile >> palette[3];
-    //renderScreen();
-
-//    qInfo() << "Creating the Z80 Object";
-//    Z80* z80 = new Z80(memoryRead, memoryWrite);
-//    z80 -> reset();
-
-//    while(!z80->halted){
-//        z80->doInstruction();
-//        qInfo() << "PC: " << z80-> PC << "A: "<< z80->A<< " B: "<< z80->B ;
-//    }
-    Z80* z80 = new Z80(memoryRead,memoryWrite);
+    //qInfo() << "Part 2";
+    //qInfo() << "Reading the graphics dump into memory";
+    z80 = new Z80(memoryRead,memoryWrite);
     z80->reset();
     while(true){
         if(!z80->halted) // if not halted, do an instruction
@@ -247,19 +283,19 @@ int main(int argc, char *argv[])
 
         int horizontal = (int) ((totalInstructions+1)%61); //(int) ((instructions+1)%61)
         if(line>=145)
-            gpuMode=VBLANK;
+            gpuMode = VBLANK;
         else if(horizontal <= 30)
-            gpuMode=HBLANK;
+            gpuMode = HBLANK;
         else if(horizontal>=31 && horizontal <=40)
-            gpuMode=SPRITE;
+            gpuMode = SPRITE;
         else
-            gpuMode=VRAM;
+            gpuMode = VRAM;
 
         if (horizontal == 0){
             line++;
             if(line == 144)
                 z80->throwInterrupt(1);
-            if(line > 0 && line < 144) {
+            if(line >= 0 && line < 144) {
                 renderScreen(line);
             }
             if(line%153 == cmpline && (videostate&0x40) != 0)
