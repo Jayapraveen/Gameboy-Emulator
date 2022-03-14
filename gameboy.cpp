@@ -31,18 +31,20 @@ long totalInstructions=0;
 int keys1 = 0xf;
 int keys0 = 0xf;
 
+//Memory Bank
+int rombank, cartridgetype, romsizemask;
 
 unsigned char getKey() {
     return 0xf;
 }
 
-void setRomMode(int address, unsigned char b) {}
 
 void setControlByte(unsigned char b) {
     tilemap=(b&8)!=0?1:0;
 
     tileset=(b&16)!=0?1:0;
- }
+}
+
 
 void setPalette(unsigned char b) {
     palette[0]=b&3;
@@ -86,13 +88,12 @@ void keydown(int value)
     else if(value == 42 || value == 62)	//Select, LSHIFT or RSHIFT
         keys0 &= 0x7;
 
-
     z80->throwInterrupt(0x10);
 }
 
 void keyup(int value)
 {
-    qInfo() << "Key up: " << value;
+    qInfo() << "Key depressed: " << value;
     if(value == 32|| value == 114)		//right, D or arrow
         keys1 |= 1;
     else if(value == 30 || value == 113)	//left, A or arrow
@@ -152,12 +153,29 @@ unsigned char memoryRead(int address)
 
 void memoryWrite(int address, unsigned char value)
 {
-    if(address >= 0 && address <= 0x3FFF)
-        setRomMode(address,value);
+    if(cartridgetype == 1 || cartridgetype ==2 || cartridgetype ==3)
+        {
+            if(address >= 0x2000 && address <= 0x3fff)
+            {
+                value = value& 0x1f;
+                if(value ==0)
+                    value =1;
 
-    else if(address >= 0x4000 && address <= 0x7FFF)
-            cout<<value <<" is outside of memorywrite spefications. (x4000-x7FFF)"<<endl;
-    else if(address >= 0x8000 && address <= 0x9FFF)
+                rombank = rombank & 0x60;
+                rombank += value;
+                romOffset = (rombank*0x4000)&romsizemask;
+            }
+            else if(address >= 0x4000 && address <=0x5fff)
+            {
+                value = value&3;
+
+                rombank = rombank&0x1f;
+                rombank |= value <<5;
+
+                romOffset =(rombank*0x4000)&romsizemask;
+            }
+        }
+    if(address >= 0x8000 && address <= 0x9FFF)
         graphicsRAM[address%0x2000] = value;
     else if(address >= 0xC000 && address <= 0xDFFF)
         workingRAM[address%0x2000] = value;
@@ -192,10 +210,10 @@ void renderScreen(int row) {
         {
             //apply scroll
             //SWAPPED X and Y
-            int y=row,x=column;
+            int y = row,x = column;
 
-            x = (x + scrollx)&255;
-            y = (y + scrolly)&255;
+            x = (x + scrollx) & 255;
+            y = (y + scrolly) & 255;
 
             //determine which tile pixel belongs to
             int tilex = x/8, tiley = y/8;
@@ -236,7 +254,7 @@ void renderScreen(int row) {
             //get color based on palette
             int color = palette[pixel];
 
-            updateSquare(x,y,color);
+            updateSquare(column , row , color);
         }
     }
 /*! Documentation
@@ -250,7 +268,7 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     qInfo() << "Part 1";
     qInfo() << "Reading Rom from a File";
-    ifstream romfile("tetris.gb", ios::in|ios::binary|ios::ate); // Beware! copy the rom file to the output directory
+    ifstream romfile("mario.gb", ios::in|ios::binary|ios::ate); // Beware! copy the rom file to the output directory
     streampos size = romfile.tellg();
     qInfo() << "Rom Size: " << size;
     rom = new char[size];
@@ -260,8 +278,12 @@ int main(int argc, char *argv[])
     romfile.close();
     qInfo() << "Displaying the Window";
     setup(argc, argv);
-    //qInfo() << "Part 2";
-    //qInfo() << "Reading the graphics dump into memory";
+    qInfo() << "Part 5";
+    rombank = 0;
+    cartridgetype = rom[0x147]&3;
+    int buff[] = {0x7fff,0xffff,0x1ffff,0x3ffff,0x7ffff,0xfffff,0x1fffff,0x3fffff,0x7fffff};
+    int adr = rom[0x148];
+    romsizemask =buff[adr];
     z80 = new Z80(memoryRead,memoryWrite);
     z80->reset();
     while(true){
