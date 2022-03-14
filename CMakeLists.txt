@@ -11,6 +11,11 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+#The Console sources
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
+
+#The Gui sources
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
 
@@ -18,6 +23,8 @@ set(PROJECT_SOURCES
         gameboy.cpp
         mainwindow.cpp
         mainwindow.h
+        Z80.cpp
+        Z80.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
