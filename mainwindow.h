@@ -1,5 +1,5 @@
 /*Defines some qt graphical objects
-Michael Black, 10/2014*/
+Margaret Black, 10/2014*/
 
 #include <QGraphicsItem>
 #include <QGraphicsView>
